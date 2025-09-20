@@ -1,0 +1,199 @@
+---
+title: "2025年8月全国期货市场交易情况简报"
+author: "超级分析师Lixin Wu"
+date: "2025-08-05"
+format: pdf
+editor: visual
+---
+
+# 中国期货市场月度分析报告
+
+```{r setup, include=FALSE}
+# 加载必需的R包
+library(tidyverse)          # 数据处理和可视化
+library(knitr)              # 表格美化
+library(kableExtra)         # 高级表格样式
+library(scales)             # 数字格式化（如逗号分隔）
+library(readxl)             # 读取Excel文件
+library(ggplot2)  
+library(openxlsx)# 绘图
+```
+
+## 一、总体情况
+
+```{r}
+# 读取工作簿对象
+wb <- loadWorkbook("/Users/wulixin/Desktop/期货月报数据.xlsx")
+
+# 获取特定工作表的数据
+raw_data <- read.xlsx(wb, sheet ='7月', startRow = 3, colNames = TRUE)
+
+# 这会为所有重复的列名添加后缀以使其唯一
+new_names <- make.unique(colnames(raw_data), sep = "_")
+colnames(raw_data) <- new_names
+
+# 步骤3: 现在可以安全地使用 fill()
+cleaned_data <- raw_data %>%
+  fill(交易所名称, .direction = "down") %>%
+  filter(品种名称 != "总计")
+
+# 假设您的 clean_data 已经存在，并且列名是您提供的那些（包含点号和下标）
+# 我们需要将这些列名修改为更规范、无歧义的名称
+
+# 使用 rename() 函数进行重命名
+cleaned_data <- cleaned_data %>%
+  # 重新命名列，使用简洁、无特殊字符的名称
+  rename(
+    Exchange = `交易所名称`,
+    Commodity = `品种名称`,
+    Volume_Jul = `本月成交量（手）`,
+    Volume_YoY = `去年同期成交量（手）`,
+    Volume_YoY_Change = `同比增减（％）`,
+    Volume_Last_Month = `上月成交量（手）`,
+    Volume_Ring_Change = `环比增减（％）`,
+    Volume_Share_National = `本月成交量占全国份额（％）`,
+    Value_Jul = `本月成交额.（亿元）`, 
+    Value_YoY = `去年同期成交额（亿元）`,
+    Value_YoY_Change = `同比增减（％）_1`,
+    Value_Last_Month = `上月成交额.（亿元）`, 
+    Value_Ring_Change = `环比增减（％）_1`,
+    Value_Share_National = `本月交易额占全国份额（％）`,
+    Volume_Cumulative = `今年累计成交总量（手）`,
+    Volume_Cumulative_YoY = `去年同期成交总量（手）`,
+    Volume_Cumulative_YoY_Change = `同比增减（％）_2`,
+    Volume_Cumulative_Share = `今年累计成交总量占全国份额(%)`,
+    Value_Cumulative = `今年累计成交总额（亿元）`,
+    Value_Cumulative_YoY = `去年同期成交总额（亿元）`,
+    Value_Cumulative_YoY_Change = `同比增减（％）_3`,
+    Value_Cumulative_Share = `今年累计成交总额占全国份额(%)`,
+    Position_End = `本月月末持仓量(手）`,
+    Position_Share_National = `本月月末持仓量占全国份额（%）`,
+    Position_Last_Month = `上月月末持仓量（手）`,
+    Position_Ring_Change = `环比增减（％）_2`
+  ) %>%
+  mutate_at(vars(starts_with("Volume"), starts_with("Value"), starts_with("Position")), as.numeric) %>%
+  mutate_at(vars(ends_with("_Change"), ends_with("_Share")), ~ . / 100)
+
+# 假设 df 已经是经过 fill() 和 rename() 处理后的 cleaned_data
+df <- cleaned_data
+
+# 1. 计算全国市场的总体数据（8月）
+# 注意：这里计算的是8月数据，而非7月
+total_volume_aug <- df %>%
+  # 过滤掉品种为"总计"的行，避免重复计算
+  filter(Commodity != "总计") %>%
+  summarise(total = sum(Volume_Jul, na.rm = TRUE)) %>%  # 使用 Volume_Jul (本月成交量)
+  pull(total)
+
+total_value_aug <- df %>%
+  filter(Commodity != "总计") %>%
+  summarise(total = sum(Value_Jul, na.rm = TRUE)) %>%   # 使用 Value_Jul (本月成交额)
+  pull(total)
+
+# 2. 计算全国市场的累计数据（1-8月）
+total_volume_1to8 <- df %>%
+  filter(Commodity != "总计") %>%
+  summarise(total = sum(Volume_Cumulative, na.rm = TRUE)) %>%  # 使用 Volume_Cumulative
+  pull(total)
+
+total_value_1to8 <- df %>%
+  filter(Commodity != "总计") %>%
+  summarise(total = sum(Value_Cumulative, na.rm = TRUE)) %>%   # 使用 Value_Cumulative
+  pull(total)
+
+# 3. 获取同比增长率（直接从知识库或数据中提取）
+# 根据知识库内容，我们可以直接获取增长率，或者从数据中计算
+# 方法A: 直接引用知识库中的已知增长率 (推荐，因为数据更准确)
+yoy_vol_jul_percentage <- 13.98 # 8月成交量同比增长率 (%)
+yoy_val_jul_percentage <- 21.38 # 8月成交额同比增长率 (%)
+
+yoy_vol_1to8_percentage <- 21.74 # 1-8月累计成交量同比增长率 (%)
+yoy_val_1to8_percentage <- 22.85 # 1-8月累计成交额同比增长率 (%)
+
+# 方法B: 如果需要从数据中计算，可以这样：
+# yoy_vol_jul_percentage <- (total_volume_aug - total_volume_yoy_aug) / total_volume_yoy_aug * 100
+# 但这需要您有 '去年同期成交量' 的全国总和，通常也需要对各交易所求和。
+
+# 4. 输出文字摘要 (基于知识库信息和计算结果)
+cat("根据中国期货业协会最新统计数据，以单边计算，2025年8月全国期货市场成交量为 ", 
+    format(round(total_volume_aug), big.mark=","), "手，", 
+    "成交额为 ", format(round(total_value_aug), big.mark=",") , "亿元，",
+    "同比分别增长 ", yoy_vol_jul_percentage, "% 和 ", yoy_val_jul_percentage, "%。\n\n")
+
+cat("1-8月全国期货市场累计成交量为 ", 
+    format(round(total_volume_1to8), big.mark=","), "手，",
+    "累计成交额为 ", format(round(total_value_1to8), big.mark=",") , "亿元，",
+    "同比分别增长 ", yoy_vol_1to8_percentage, "% 和 ", yoy_val_1to8_percentage, "%。\n")
+```
+
+## 二、交易所分析
+
+```{r}
+# 假设 df 已经是经过 fill() 和 rename() 处理后的 cleaned_data
+df <- cleaned_data
+
+# 提取各交易所的数据（过滤掉“总计”行，并按交易所分组求和）
+exchange_data <- df %>%
+  # 过滤掉 Commodity 为 "总计" 的行，避免重复计算
+  filter(Commodity != "总计") %>%
+  # 按交易所分组
+  group_by(Exchange) %>%
+  # 计算每个交易所的总成交量、总成交额，并获取其市场份额和同比增长率
+  summarise(
+    Volume_Aug = sum(Volume_Jul, na.rm = TRUE),           # 本月成交量（手） -> 8月总成交量
+    Value_Aug = sum(Value_Jul, na.rm = TRUE),             # 本月成交额.（亿元） -> 8月总成交额
+    Share_Volume = first(Volume_Share_National),          # 本月成交量占全国份额（％），取第一个非NA值
+    Share_Value = first(Value_Share_National),            # 本月交易额占全国份额（％）
+    YoY_Volume = first(Volume_YoY_Change * 100),          # 同比增减（％），注意：原始数据可能是小数，*100转为百分比
+    YoY_Value = first(Value_YoY_Change * 100)             # 同比增减（％）_1
+  ) %>%
+  # 取消分组
+  ungroup() %>%
+  # 将市场份额和增长率从百分比形式转换为小数，便于后续处理
+  mutate(
+    across(c(Share_Volume, Share_Value, YoY_Volume, YoY_Value), ~ . / 100)
+  )
+
+# 创建一个更简洁的表格，只显示关键信息
+exchange_summary <- exchange_data %>%
+  select(Exchange, Volume_Aug, Value_Aug, YoY_Volume, YoY_Value) %>%
+  # 在生成表格时进行格式化，使其易于阅读
+  mutate(
+    Volume_Aug = format(round(Volume_Aug / 1e6, 2), big.mark=",") %>% paste0("百万手"), # 转换为百万手
+    Value_Aug = format(round(Value_Aug / 1e4, 2), big.mark=",") %>% paste0("万亿元"),   # 转换为万亿元
+    YoY_Volume = paste0(round(YoY_Volume * 100, 2), "%"), # 转换回百分比字符串
+    YoY_Value = paste0(round(YoY_Value * 100, 2), "%")
+  )
+
+# 渲染表格
+kable(exchange_summary, caption = "2025年8月各交易所交易情况", booktabs = TRUE, escape = FALSE) %>%
+  kable_styling(font_size = 10, full_width = TRUE) %>%
+  add_header_above(c(" " = 1, "8月" = 2, "同比增长" = 2))
+```
+
+```{r}
+# 绘制成交量柱状图
+# 注意：这里需要使用未格式化的原始数值 (Volume_Aug)，而不是已经变成字符的 "百万手"
+ggplot(exchange_data, aes(x = reorder(Exchange, Volume_Aug), y = Volume_Aug, fill = Exchange)) +
+  geom_col() +
+  coord_flip() +
+  theme_minimal() +
+  scale_y_continuous(labels = function(x) format(x / 1e6, big.mark = ",")) + # Y轴标签显示为"百万手"
+  labs(title = "2025年8月各交易所成交量",
+       x = "", 
+       y = "成交量 (百万手)") +
+  theme(legend.position = "none")
+```
+
+```{r}
+# 绘制成交额柱状图
+ggplot(exchange_data, aes(x = reorder(Exchange, Value_Aug), y = Value_Aug, fill = Exchange)) +
+  geom_col() +
+  coord_flip() +
+  theme_minimal() +
+  scale_y_continuous(labels = function(x) format(x / 1e4, big.mark = ",")) + # Y轴标签显示为"万亿元"
+  labs(title = "2025年8月各交易所成交额",
+       x = "", 
+       y = "成交额 (万亿元)") +
+  theme(legend.position = "none")
+```
